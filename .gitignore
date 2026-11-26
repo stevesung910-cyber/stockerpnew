@@ -1,0 +1,75 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+coverage/
+*.log
+backend/src/database/generated/
+
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account.json
+
+# Dependencies and generated files
+node_modules/
+dist/
+build/
+coverage/
+*.log
+
+# Local databases and backups
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.sql.gz
+*.tar
+*.tar.gz
+*.zip
+
+# Local configuration
+.aws/
+.codex/
+.agents/
+
+# Operating system
+.DS_Store
+Thumbs.db
+coverage/
+*.log
+
+# Local databases and backups
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.sql.gz
+*.tar
+*.tar.gz
+*.zip
+backups/
+
+# Local configuration
+.aws/
+.codex/
+.agents/
+
+# Operating system
+.DS_Store
+Thumbs.db
+.codex/
+.agents/
+.DS_Store
+Thumbs.db
+
+# Temporary backups and generated metadata
+*.bak
+*.tsbuildinfo

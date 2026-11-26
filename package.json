@@ -1,0 +1,24 @@
+{
+  "name": "stockerp",
+  "private": true,
+  "workspaces": ["frontend", "backend", "shared"],
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm --workspace backend run dev",
+    "dev:web": "npm --workspace frontend run dev",
+    "build": "npm run build --workspace shared && npm run build --workspace backend && npm run build --workspace frontend",
+    "typecheck": "npm run typecheck --workspace shared && npm run typecheck --workspace backend && npm run typecheck --workspace frontend",
+    "check:smtp": "node --import tsx backend/src/check-smtp.ts",
+    "test:smtp": "node --import tsx backend/src/modules/auth/smtp-email-delivery.unit.test.ts",
+    "test:gmail": "node scripts/development/test-gmail.mjs",
+    "test:phase1": "npm --workspace backend run test:phase1",
+    "test:phase1:unit": "npm --workspace backend run test:phase1:unit",
+    "test:phase2": "npm --workspace backend run test:phase2",
+    "test:phase2:unit": "npm --workspace backend run test:phase2:unit",
+    "db:generate": "npm --workspace backend run db:generate",
+    "db:migrate": "npm --workspace backend run db:migrate",
+    "db:migrate:deploy": "npm --workspace backend run db:migrate:deploy",
+    "setup": "node scripts/setup/check-env.mjs"
+  },
+  "devDependencies": { "concurrently": "^9.1.2", "typescript": "^5.7.3" }
+}

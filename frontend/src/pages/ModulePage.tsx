@@ -1,0 +1,3 @@
+import { Construction } from "lucide-react";
+import { useLocation } from "react-router-dom";
+export function ModulePage(){const location=useLocation();const title=location.pathname.split("/").at(-1)?.replaceAll("-"," ").replace(/\b\w/g,c=>c.toUpperCase())??"Module";return <><div className="page-heading"><div><div className="eyebrow">WORKSPACE</div><h1>{title}</h1><p>Manage {title.toLowerCase()} for your active company.</p></div></div><section className="panel coming-soon"><div className="coming-icon"><Construction size={24}/></div><h2>Company setup required</h2><p>This workspace will show company records after a company is connected. Business modules are being delivered in functional slices.</p></section></>}

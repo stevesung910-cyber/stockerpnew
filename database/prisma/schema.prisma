@@ -1,0 +1,640 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../backend/src/database/generated"
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+enum AuditOutcome {
+  SUCCESS
+  FAILURE
+}
+
+enum FinancialYearStatus {
+  OPEN
+  CLOSED
+}
+enum StockDocumentType {
+  OPENING
+  RECEIPT
+  ISSUE
+  TRANSFER
+  ADJUSTMENT
+  REVERSAL
+}
+enum StockDocumentStatus {
+  DRAFT
+  POSTED
+  REVERSED
+}
+enum LocationType {
+  WAREHOUSE
+  RACK
+  SHELF
+  BIN
+}
+
+model User {
+  id            String @id @default(cuid())
+  email         String @unique
+  passwordHash  String
+  displayName   String
+  emailVerifiedAt DateTime?
+  ownerApprovedAt DateTime?
+  legacyRegistration Boolean @default(false)
+  registrationRequest RegistrationRequest?
+  active        Boolean @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  memberships   CompanyMembership[]
+  sessions      AuthSession[]
+  passwordResetTokens PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  createdInvitations CompanyInvitation[] @relation("InvitationCreator")
+}
+
+model Company {
+  id           String @id @default(cuid())
+  name         String
+  legalName    String?
+  gstin        String?
+  pan          String?
+  cin          String?
+  businessType String?
+  logoUrl      String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  pinCode      String?
+  phone        String?
+  email        String?
+  website      String?
+  gstRegistrationType String?
+  financialYearStartMonth Int @default(4)
+  bankName     String?
+  bankAccountName String?
+  bankAccountNumber String?
+  bankIfsc     String?
+  authorizedSignatory String?
+  qrCodeUrl    String?
+  currency     String @default("INR")
+  timezone     String @default("Asia/Kolkata")
+  active       Boolean @default(true)
+  archivedAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  memberships  CompanyMembership[]
+  sequences    DocumentSequence[]
+  roles        CompanyRole[]
+  invitations  CompanyInvitation[]
+  activeSessions AuthSession[] @relation("ActiveCompanySessions")
+  financialYears FinancialYear[]
+  itemCategories ItemCategory[]
+  units UnitOfMeasure[]
+  items Item[]
+  hsnCodes HsnCode[]
+  gstConfigurations GstTaxConfiguration[]
+  suppliers Supplier[]
+  customers Customer[]
+  locations WarehouseLocation[]
+  stockDocuments StockDocument[]
+  stockLedgerEntries StockLedgerEntry[]
+  stockBalances StockBalance[]
+  idempotencyRecords StockIdempotencyRecord[]
+  openingBatches OpeningStockBatch[]
+  @@index([active])
+}
+
+model CompanyMembership {
+  id        String @id @default(cuid())
+  userId    String
+  companyId String
+  roleId    String
+  status    MembershipStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  user      User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  role      CompanyRole @relation(fields: [roleId, companyId], references: [id, companyId], onDelete: Restrict)
+  @@unique([userId, companyId])
+  @@index([userId, status])
+  @@index([companyId, status])
+}
+
+model AuthSession {
+  id              String @id @default(cuid())
+  tokenHash       String @unique
+  userId          String
+  activeCompanyId String?
+  createdAt       DateTime @default(now())
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  lastSeenAt      DateTime @default(now())
+  user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeCompany   Company? @relation("ActiveCompanySessions", fields: [activeCompanyId], references: [id], onDelete: SetNull)
+  gmailOAuthState GmailOAuthState?
+  @@index([userId, expiresAt])
+  @@index([activeCompanyId])
+}
+
+model PasswordResetToken {
+  id        String @id @default(cuid())
+  tokenHash String @unique
+  userId    String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+}
+
+model EmailVerificationToken {
+  id        String @id @default(cuid())
+  tokenHash String @unique
+  userId    String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+}
+
+model CompanyInvitation {
+  id              String @id @default(cuid())
+  tokenHash       String @unique
+  email           String
+  companyId       String
+  roleId          String
+  invitedByUserId String
+  createdAt       DateTime @default(now())
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  role            CompanyRole @relation(fields: [roleId, companyId], references: [id, companyId], onDelete: Restrict)
+  invitedBy       User @relation("InvitationCreator", fields: [invitedByUserId], references: [id], onDelete: Restrict)
+  @@index([companyId, email, expiresAt])
+  @@index([invitedByUserId, expiresAt])
+}
+
+model CompanyRole {
+  id          String @id @default(cuid())
+  companyId   String
+  code        String
+  name        String
+  description String?
+  isSystem    Boolean @default(false)
+  createdAt   DateTime @default(now())
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  memberships CompanyMembership[]
+  permissions RolePermission[]
+  invitations CompanyInvitation[]
+  @@unique([companyId, code])
+  @@unique([id, companyId])
+  @@index([companyId, name])
+}
+
+model Permission {
+  id        String @id @default(cuid())
+  key       String @unique
+  module    String
+  action    String
+  roles     RolePermission[]
+  @@unique([module, action])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         CompanyRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model DocumentSequence {
+  id        String @id @default(cuid())
+  companyId String
+  type      String
+  nextValue BigInt @default(1)
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  @@unique([companyId, type])
+}
+
+
+// Append-only security and business activity history. Actor/company identifiers
+// intentionally have no foreign keys so historical IDs survive record deletion.
+model AuditEvent {
+  id          String       @id @default(cuid())
+  actorUserId String?
+  companyId   String?
+  action      String
+  targetType  String
+  targetId    String?
+  outcome     AuditOutcome
+  requestId   String?
+  ipAddress   String?
+  userAgent   String?
+  metadata    Json?
+  createdAt   DateTime     @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@index([requestId])
+}
+
+model FinancialYear {
+  id String @id @default(cuid())
+  companyId String
+  code String
+  startDate DateTime @db.Date
+  endDate DateTime @db.Date
+  status FinancialYearStatus @default(OPEN)
+  closedAt DateTime?
+  closedByUserId String?
+  reopenedAt DateTime?
+  reopenedByUserId String?
+  timezone String
+  createdAt DateTime @default(now())
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  documents StockDocument[]
+  @@unique([id, companyId])
+  @@unique([companyId, code])
+  @@index([companyId, startDate, endDate])
+}
+
+model ItemCategory {
+  id String @id @default(cuid())
+  companyId String
+  code String
+  name String
+  description String?
+  parentId String?
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  parent ItemCategory? @relation("CategoryTree", fields: [parentId, companyId], references: [id, companyId], onDelete: Restrict)
+  children ItemCategory[] @relation("CategoryTree")
+  items Item[]
+  @@unique([id, companyId])
+  @@unique([companyId, code])
+  @@index([companyId, parentId])
+}
+
+model UnitOfMeasure {
+  id String @id @default(cuid())
+  companyId String
+  code String
+  name String
+  symbol String
+  decimalPlaces Int @default(6)
+  active Boolean @default(true)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  baseItems Item[] @relation("ItemBaseUnit")
+  conversions ItemUnitConversion[]
+  documentLines StockDocumentLine[]
+  @@unique([id, companyId])
+  @@unique([companyId, code])
+}
+
+model HsnCode {
+  id String @id @default(cuid())
+  companyId String
+  code String
+  description String
+  effectiveFrom DateTime @db.Date
+  effectiveTo DateTime? @db.Date
+  active Boolean @default(true)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  items Item[]
+  @@unique([id, companyId])
+  @@unique([companyId, code, effectiveFrom])
+  @@index([companyId, code, active])
+}
+
+model GstTaxConfiguration {
+  id String @id @default(cuid())
+  companyId String
+  code String
+  description String
+  taxType String
+  jurisdiction String
+  cgstRate Decimal @default(0) @db.Decimal(7,4)
+  sgstRate Decimal @default(0) @db.Decimal(7,4)
+  igstRate Decimal @default(0) @db.Decimal(7,4)
+  cessRate Decimal @default(0) @db.Decimal(7,4)
+  effectiveFrom DateTime @db.Date
+  effectiveTo DateTime? @db.Date
+  active Boolean @default(true)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  items Item[]
+  @@unique([id, companyId])
+  @@unique([companyId, code, effectiveFrom])
+  @@index([companyId, jurisdiction, effectiveFrom, effectiveTo])
+}
+
+model Item {
+  id String @id @default(cuid())
+  companyId String
+  code String
+  name String
+  description String?
+  categoryId String?
+  baseUnitId String
+  hsnCodeId String?
+  taxConfigurationId String?
+  reorderLevel Decimal @default(0) @db.Decimal(20,6)
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  category ItemCategory? @relation(fields: [categoryId, companyId], references: [id, companyId], onDelete: Restrict)
+  baseUnit UnitOfMeasure @relation("ItemBaseUnit", fields: [baseUnitId, companyId], references: [id, companyId], onDelete: Restrict)
+  hsnCode HsnCode? @relation(fields: [hsnCodeId, companyId], references: [id, companyId], onDelete: Restrict)
+  taxConfiguration GstTaxConfiguration? @relation(fields: [taxConfigurationId, companyId], references: [id, companyId], onDelete: Restrict)
+  conversions ItemUnitConversion[]
+  documentLines StockDocumentLine[]
+  ledgerEntries StockLedgerEntry[]
+  balances StockBalance[]
+  @@unique([id, companyId])
+  @@unique([companyId, code])
+  @@index([companyId, name])
+}
+
+model ItemUnitConversion {
+  id String @id @default(cuid())
+  companyId String
+  itemId String
+  unitId String
+  factorToBase Decimal @db.Decimal(20,6)
+  effectiveFrom DateTime @db.Date
+  effectiveTo DateTime? @db.Date
+  active Boolean @default(true)
+  item Item @relation(fields: [itemId, companyId], references: [id, companyId], onDelete: Restrict)
+  unit UnitOfMeasure @relation(fields: [unitId, companyId], references: [id, companyId], onDelete: Restrict)
+  @@unique([id, companyId])
+  @@unique([companyId, itemId, unitId, effectiveFrom])
+  @@index([companyId, itemId, effectiveFrom, effectiveTo])
+}
+
+model Supplier {
+  id String @id @default(cuid())
+  companyId String
+  code String
+  name String
+  email String?
+  phone String?
+  gstin String?
+  pan String?
+  state String?
+  address Json?
+  active Boolean @default(true)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  @@unique([id, companyId])
+  @@unique([companyId, code])
+  @@index([companyId, name])
+}
+
+model Customer {
+  id String @id @default(cuid())
+  companyId String
+  code String
+  name String
+  email String?
+  phone String?
+  gstin String?
+  pan String?
+  state String?
+  address Json?
+  active Boolean @default(true)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  @@unique([id, companyId])
+  @@unique([companyId, code])
+  @@index([companyId, name])
+}
+
+model WarehouseLocation {
+  id String @id @default(cuid())
+  companyId String
+  warehouseId String
+  parentId String?
+  type LocationType
+  code String
+  name String
+  active Boolean @default(true)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  parent WarehouseLocation? @relation("LocationTree", fields: [parentId, companyId, warehouseId], references: [id, companyId, warehouseId], onDelete: Restrict)
+  children WarehouseLocation[] @relation("LocationTree")
+  balances StockBalance[]
+  ledgerEntries StockLedgerEntry[]
+  documentLines StockDocumentLine[]
+  destinationDocumentLines StockDocumentLine[] @relation("DestinationLocation")
+  @@unique([id, companyId, warehouseId])
+  @@unique([id, companyId])
+  @@unique([companyId, warehouseId, code])
+  @@index([companyId, warehouseId, parentId])
+}
+
+model OpeningStockBatch {
+  id String @id @default(cuid())
+  companyId String
+  status StockDocumentStatus @default(DRAFT)
+  finalizedAt DateTime?
+  finalizedByUserId String?
+  createdAt DateTime @default(now())
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  documents StockDocument[]
+  @@unique([companyId])
+  @@unique([id, companyId])
+}
+
+model StockDocument {
+  id String @id @default(cuid())
+  companyId String
+  financialYearId String
+  openingBatchId String?
+  type StockDocumentType
+  status StockDocumentStatus @default(DRAFT)
+  documentNumber String
+  effectiveDate DateTime @db.Date
+  reason String?
+  reversalOfId String?
+  createdByUserId String
+  postedByUserId String?
+  postedAt DateTime?
+  reversedByUserId String?
+  reversedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  financialYear FinancialYear @relation(fields: [financialYearId, companyId], references: [id, companyId], onDelete: Restrict)
+  openingBatch OpeningStockBatch? @relation(fields: [openingBatchId, companyId], references: [id, companyId], onDelete: Restrict)
+  reversalOf StockDocument? @relation("DocumentReversal", fields: [reversalOfId, companyId], references: [id, companyId], onDelete: Restrict)
+  reversals StockDocument[] @relation("DocumentReversal")
+  lines StockDocumentLine[]
+  ledgerEntries StockLedgerEntry[]
+  idempotencyRecords StockIdempotencyRecord[]
+  @@unique([id, companyId])
+  @@unique([companyId, reversalOfId])
+  @@unique([companyId, documentNumber])
+  @@index([companyId, effectiveDate, status])
+  @@index([companyId, type, createdAt])
+}
+
+model StockDocumentLine {
+  id String @id @default(cuid())
+  companyId String
+  documentId String
+  lineNumber Int
+  itemId String
+  locationId String
+  destinationLocationId String?
+  enteredQuantity Decimal @db.Decimal(20,6)
+  enteredUnitId String
+  conversionFactor Decimal @db.Decimal(20,6)
+  baseQuantity Decimal @db.Decimal(20,6)
+  unitCost Decimal @db.Decimal(20,8)
+  lineValue Decimal @db.Decimal(20,2)
+  hsnSnapshot String?
+  taxSnapshot Json?
+  document StockDocument @relation(fields: [documentId, companyId], references: [id, companyId], onDelete: Restrict)
+  item Item @relation(fields: [itemId, companyId], references: [id, companyId], onDelete: Restrict)
+  enteredUnit UnitOfMeasure @relation(fields: [enteredUnitId, companyId], references: [id, companyId], onDelete: Restrict)
+  location WarehouseLocation @relation(fields: [locationId, companyId], references: [id, companyId], onDelete: Restrict)
+  destinationLocation WarehouseLocation? @relation("DestinationLocation", fields: [destinationLocationId, companyId], references: [id, companyId], onDelete: Restrict)
+  ledgerEntries StockLedgerEntry[]
+  @@unique([id, companyId])
+  @@unique([companyId, documentId, lineNumber])
+  @@index([companyId, itemId, documentId])
+}
+
+model StockLedgerEntry {
+  id String @id @default(cuid())
+  companyId String
+  itemId String
+  locationId String
+  documentId String
+  lineId String
+  effectiveDate DateTime @db.Date
+  createdAt DateTime @default(now())
+  signedBaseQuantity Decimal @db.Decimal(20,6)
+  signedInventoryValue Decimal @db.Decimal(20,2)
+  unitCost Decimal @db.Decimal(20,8)
+  entryType StockDocumentType
+  reversalOfId String?
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  item Item @relation(fields: [itemId, companyId], references: [id, companyId], onDelete: Restrict)
+  location WarehouseLocation @relation(fields: [locationId, companyId], references: [id, companyId], onDelete: Restrict)
+  document StockDocument @relation(fields: [documentId, companyId], references: [id, companyId], onDelete: Restrict)
+  line StockDocumentLine @relation(fields: [lineId, companyId], references: [id, companyId], onDelete: Restrict)
+  reversalOf StockLedgerEntry? @relation("LedgerReversal", fields: [reversalOfId, companyId], references: [id, companyId], onDelete: Restrict)
+  reversals StockLedgerEntry[] @relation("LedgerReversal")
+  @@unique([id, companyId])
+  @@unique([companyId, documentId, lineId, locationId])
+  @@index([companyId, itemId, locationId, effectiveDate, createdAt])
+  @@index([companyId, documentId])
+}
+
+model StockBalance {
+  id String @id @default(cuid())
+  companyId String
+  itemId String
+  locationId String
+  baseQuantity Decimal @default(0) @db.Decimal(20,6)
+  inventoryValue Decimal @default(0) @db.Decimal(20,2)
+  updatedAt DateTime @updatedAt
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  item Item @relation(fields: [itemId, companyId], references: [id, companyId], onDelete: Restrict)
+  location WarehouseLocation @relation(fields: [locationId, companyId], references: [id, companyId], onDelete: Restrict)
+  @@unique([companyId, itemId, locationId])
+  @@index([companyId, locationId])
+}
+
+model StockIdempotencyRecord {
+  id String @id @default(cuid())
+  companyId String
+  operation String
+  key String
+  requestHash String
+  resultDocumentId String
+  createdAt DateTime @default(now())
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  resultDocument StockDocument @relation(fields: [resultDocumentId, companyId], references: [id, companyId], onDelete: Restrict)
+  @@unique([companyId, operation, key])
+  @@index([companyId, resultDocumentId])
+}
+
+model RegistrationRequest {
+  id               String    @id
+  email            String
+  pendingEmail     String?   @unique
+  displayName      String
+  passwordHash     String?
+  continuationHash String?   @unique
+  otpDigest        String?
+  challengeVersion Int       @default(1)
+  otpExpiresAt     DateTime
+  failedAttempts   Int       @default(0)
+  lastIssuedAt     DateTime
+  providerAccepted Boolean   @default(false)
+  expiresAt        DateTime
+  consumedAt       DateTime?
+  resultingUserId  String?   @unique
+  resultingUser    User?     @relation(fields: [resultingUserId], references: [id], onDelete: SetNull)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([expiresAt])
+}
+
+model AuthRateLimitBucket {
+  key         String   @id
+  count       Int
+  expiresAt   DateTime
+
+  @@index([expiresAt])
+}
+
+enum GmailConnectionStatus {
+  DISCONNECTED
+  CONNECTED
+  DISCONNECTING
+  REAUTHORIZATION_REQUIRED
+}
+
+model EmailIntegrationCredential {
+  id                    String @id
+  provider              String
+  senderEmail           String
+  encryptedRefreshToken String?
+  encryptionKeyVersion  Int?
+  revision              String
+  status                GmailConnectionStatus @default(DISCONNECTED)
+  connectedAt           DateTime?
+  lastTokenRefreshAt    DateTime?
+  lastSuccessfulSendAt  DateTime?
+  lastError             String?
+  updatedAt             DateTime @updatedAt
+}
+
+model GmailOAuthState {
+  sessionId          String @id
+  session            AuthSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  digest             String
+  credentialRevision String
+  expiresAt          DateTime
+
+  @@index([expiresAt])
+}
